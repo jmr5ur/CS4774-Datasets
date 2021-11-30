@@ -5,7 +5,7 @@ countyDataDic = {}
 countyDataDicYear = {}
 countyToFIPS = {}
 # begin by adding bee data
-beeData = open('Bee Colony Census Data by County.csv','r')
+beeData = open('BeeColonyCensusNew.csv','r')
 first = True
 i = 0
 for line in beeData.readlines():
@@ -21,6 +21,7 @@ for line in beeData.readlines():
         countyDataDicYear[(fips,2002)] = [2002,fips, lineSplit[6], 'No data']
         countyDataDicYear[(fips,2007)] = [2007,fips, lineSplit[6], 'No data']
         countyDataDicYear[(fips,2012)] = [2012,fips, lineSplit[6], 'No data']
+        countyDataDicYear[(fips,2017)] = [2017,fips, lineSplit[6], 'No data']
     year = lineSplit[0]
     if year == '2012':
         try:
@@ -43,6 +44,13 @@ for line in beeData.readlines():
         except:
             countyDataDic[fips][4] = lineSplit[8]
             countyDataDicYear[(fips,2002)][3] = lineSplit[8]
+    elif year == '2017':
+        try:
+            countyDataDic[fips][4] = int(lineSplit[8])
+            countyDataDicYear[(fips,2017)][3] = int(lineSplit[8])
+        except:
+            countyDataDic[fips][4] = lineSplit[8]
+            countyDataDicYear[(fips,2017)][3] = lineSplit[8]
     else:
         print('something went wrong!')
     # update the countyToFIPS dict
@@ -117,7 +125,7 @@ for key in countyDataDic.keys():
     if len(countyDataDic[key]) != 8:
         countyDataDic[key].append('No data')
 # read in the new air quality data : as a note, more data can be added here lol
-aqpm25 = open('aq_pm25.csv','r')
+aqpm25 = open('aq_pm25_2.csv','r')
 first = True
 i=0
 for line in aqpm25.readlines():
@@ -133,6 +141,8 @@ for line in aqpm25.readlines():
             countyDataDicYear[(fips,2007)].append(float(lineSplit[5]))
         elif lineSplit[4] == "2012":
             countyDataDicYear[(fips, 2012)].append(float(lineSplit[5]))
+        elif lineSplit[4] == "2016":
+            countyDataDicYear[(fips, 2017)].append(float(lineSplit[5]))
     except KeyError: # this should only be reached if there is some sort of keyerror (we haven't seen bee data, so for now we'll just skip)
         pass
 # Time to read in the pesticide use data here
@@ -236,7 +246,71 @@ for key in countyDataDic.keys():
         countyDataDic[key].append('No data')
         countyDataDicYear[(key, 2002)].append('No data')
 pest2007.close()
+# add empty data to all vals
+for key in countyDataDicYear.keys():
+    countyDataDicYear[key].append('No data')
+# 2017 pest data
+pest2017 = open('EPest.county.estimates.2007.txt', 'r')
+first = True
+pest2017Dic = {}
+i = 0
+for line in pest2017.readlines():
+    lineSplit = line.split('\t')
+    if first:
+        first = False
+        continue
 
+    fips = lineSplit[2] + lineSplit[3]
+    if fips not in pest2007Dic.keys():
+        pest2007Dic[fips] = 0
+    # add midpoint of estimates (in cases where there is only one value, just take that value)
+    # print(lineSplit[-1].replace('\n',''),lineSplit[-2],i)
+    if lineSplit[1] == '2017':
+        lowEst = lineSplit[-2]
+        highEst = lineSplit[-1].replace('\n','')
+        if lowEst == '':
+            lowEst = highEst
+        if highEst == '':
+            highEst = lowEst
+        pest2017Dic[fips] += (float(highEst)+float(lowEst))/2
+    i+=1
+for key in countyDataDic.keys():
+    try:
+        # if the key is in our pest dict, add the estimated pesticide usage to CDD
+        countyDataDic[key].append(pest2017Dic[key])
+        countyDataDicYear[(key, 2017)].append(pest2017Dic[key])
+    except:
+        # otherwise, add a no data marker
+        countyDataDic[key].append('No data')
+        countyDataDicYear[(key, 2017)].append('No data')
+pest2007.close()
+# do the water data
+water2013 = open('2013CountyHealthRankingsNationalDataCSV.csv','r')
+i = 0
+for line in water2013.readlines():
+    # do the actual parsing lol
+    try:
+        lineSplit = line.split(',')
+        fips = lineSplit[0]
+        presence = int(lineSplit[-11]) > 0
+        if presence:
+            countyDataDicYear[(fips, 2012)][-1] = "Yes"
+        else:
+            countyDataDicYear[(fips, 2012)][-1] = 'No'
+        print(countyDataDicYear[((fips, 2012))])
+    except:
+        # there's nothing to do here except for skip over this data point
+        pass
+    i += 1
+water2017 = open('2017CountyHealthRankingsDataCSV.csv','r')
+for line in water2017.readlines():
+    try:
+        lineSplit = line.split(',')
+        fips = lineSplit[0]
+        countyDataDicYear[(fips, 2017)][-1]=lineSplit[-19]
+        print(countyDataDicYear[(fips, 2017)][-1])
+    except:
+        pass
 headers1 = ['FIPS','County','2012_colonies','2007_colonies','2002_colonies',
         '2012_avg_aqi','2007_avg_aqi', '2002_avg_aqi',
         '2012_pest_e','2007_pest_e','2002_pest_e']
@@ -250,15 +324,14 @@ for key in countyDataDic.keys():
     f2.write(','.join(countyDataDic[key])+'\n')
 count = 0
 for key in countyDataDicYear.keys():
-    if len(countyDataDicYear[key]) == 6:
+    if len(countyDataDicYear[key]) == 7:
         for i in range(len(countyDataDicYear[key])):
             countyDataDicYear[key][i] = str(countyDataDicYear[key][i])
         f.write(','.join(countyDataDicYear[key])+'\n')
     count += 1
-
 print(count)
 f.close()
-# print(countyDataDicYear)
+print(countyDataDicYear)
 # print(countyDataDic)
 # AS A NOTE: This script is pretty easily modular, just need to add the specific code to parse whatever dataset you're using
 # ALSO OF NOTE: We currently don't have water quality data, that is difficult to work with, looking for alt. sources
